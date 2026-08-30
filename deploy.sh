@@ -11,7 +11,10 @@ SRC="$(cd "$(dirname "$0")" && pwd)/index.html"
 # and reads as a passing guard that never actually ran.
 tmp=$(mktemp /tmp/tile-parlour.XXXXXX.js)
 trap 'rm -f "$tmp"' EXIT
-sed -n '/^<script>/,/^<\/script>/p' "$SRC" | sed '1d;$d' > "$tmp"
+# Concatenate EVERY <script> block. A naive sed range keeps the intervening
+# </script><script> tags once there is more than one block, which yields
+# invalid JS and fails the gate on a perfectly good file.
+awk '/^<script>/{inb=1; next} /^<\/script>/{if(inb) print ";"; inb=0; next} inb' "$SRC" > "$tmp"
 [ -s "$tmp" ] || { echo "FAILED: extracted no JS from $SRC"; exit 1; }
 node --check "$tmp" || { echo "FAILED: index.html contains invalid JS"; exit 1; }
 echo "js syntax ok ($(wc -l < "$tmp") lines)"

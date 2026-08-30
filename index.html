@@ -242,9 +242,13 @@ window.TILE_ART = TILE_ART;
   const COLS = 10, ROWS = 8;
   const W = COLS + 2, H = ROWS + 2;
   const FACES = Object.keys(window.TILE_ART);   // 20 procedurally-drawn tile faces
-  const START_SECONDS = 300;
+  const START_SECONDS = 90;           // time is the resource, not a backdrop
+  const MAX_SECONDS   = 120;          // headroom above the start, so gains still count
+  const MATCH_TIME    = 3;            // every match feeds the clock
   const IDLE_HINT_MS = 9000;          // auto-hint after this long with no match
-  const COMBO_MS     = 3500;          // chain window: match again inside it to build combo
+  const COMBO_BASE_MS = 3500;         // chain window at the start of a chain
+  const COMBO_MIN_MS  = 2000;         // ...and where it bottoms out
+  const COMBO_STEP_MS = 170;          // tightens per level, so a long chain is earned
   const BONUS_CAP    = 5;             // max seconds a single chained match can return
   const GIFT_EVERY   = 5;             // every Nth combo level clears a pair for free
 
@@ -259,7 +263,14 @@ window.TILE_ART = TILE_ART;
   let grid, els, sel = null;
   let remaining, seconds, ticker, busy = false;
   let idleTimer = null, hinted = [];
-  let combo = 0, comboUntil = 0, comboTicker = null, score = 0;
+  let combo = 0, comboUntil = 0, comboTicker = null, score = 0, comboSpan = 3500;
+
+  // The window shrinks as the chain grows: holding x12 is a genuinely tighter
+  // ask than reaching x2. A fixed window never breaks, which made long chains
+  // automatic rather than earned.
+  function comboWindow(level){
+    return Math.max(COMBO_MIN_MS, COMBO_BASE_MS - (level - 1) * COMBO_STEP_MS);
+  }
 
   const DIRS = [[0,-1],[1,0],[0,1],[-1,0]];
 
@@ -374,7 +385,7 @@ window.TILE_ART = TILE_ART;
     render();
     ensureSolvable();
     updateHud();
-    barEl.classList.remove("low"); barEl.style.width = "100%";
+    paintTimer();
     ticker = setInterval(tick, 1000);
     clearInterval(comboTicker); comboTicker = setInterval(comboTick, 90);
     modal.classList.remove("on");
@@ -554,19 +565,21 @@ window.TILE_ART = TILE_ART;
     // chain if this match landed inside the window left by the previous one
     const now = Date.now();
     combo = (now < comboUntil) ? combo + 1 : 1;
-    comboUntil = now + COMBO_MS;
+    comboSpan  = comboWindow(combo);
+    comboUntil = now + comboSpan;
 
     score += 100 * combo;
     Audio2.sfx("match:" + combo);
 
-    if(combo >= 2){
-      const bonus = Math.min(combo - 1, BONUS_CAP);      // +1s per level, capped
-      seconds = Math.min(seconds + bonus, START_SECONDS);
-      barEl.style.width = Math.max(0,(seconds/START_SECONDS)*100) + "%";
-      barEl.classList.toggle("low", seconds <= 60);
-      floatText("\u00d7" + combo + "  +" + bonus + "s", b.x, b.y, combo >= GIFT_EVERY);
-      Audio2.sfx("bonus");
-    }
+    // Every match buys time; a chain buys more. With a 90s start the board is
+    // only finishable by keeping matches coming, which is the point.
+    const bonus = combo >= 2 ? Math.min(combo - 1, BONUS_CAP) : 0;
+    const gained = MATCH_TIME + bonus;
+    seconds = Math.min(seconds + gained, MAX_SECONDS);
+    paintTimer();
+    floatText((combo >= 2 ? "\u00d7" + combo + "  " : "") + "+" + gained + "s",
+              b.x, b.y, combo >= GIFT_EVERY);
+    if(combo >= 2) Audio2.sfx("bonus");
     paintCombo();
 
     const gift = (combo > 0 && combo % GIFT_EVERY === 0);
@@ -653,7 +666,7 @@ window.TILE_ART = TILE_ART;
       if(combo >= 2 && leftMs <= 0){ combo = 0; paintCombo(); }
       return;
     }
-    fill.style.width = Math.max(0, Math.min(100, (leftMs / COMBO_MS) * 100)) + "%";
+    fill.style.width = Math.max(0, Math.min(100, (leftMs / comboSpan) * 100)) + "%";
   }
 
   // floating "+2s" / "COMBO x4" text anchored over a board cell
@@ -680,6 +693,8 @@ window.TILE_ART = TILE_ART;
     const ea = els[p.y][p.x], eb = els[q.y][q.x];
     if(!ea || !eb){ busy = false; armIdle(); return false; }
     Audio2.sfx("gift");
+    seconds = Math.min(seconds + MATCH_TIME, MAX_SECONDS);
+    paintTimer();
     if(path) drawPath(path);
     ea.classList.add("gift"); eb.classList.add("gift");
     grid[p.y][p.x] = null; grid[q.y][q.x] = null;
@@ -705,10 +720,13 @@ window.TILE_ART = TILE_ART;
     availEl.textContent = n;
     plaqueEl.classList.toggle("warn", n === 0);
   }
+  function paintTimer(){
+    barEl.style.width = Math.max(0, Math.min(100, (seconds/MAX_SECONDS)*100)) + "%";
+    barEl.classList.toggle("low", seconds <= 20);
+  }
   function tick(){
     seconds--;
-    barEl.style.width = Math.max(0, (seconds/START_SECONDS)*100) + "%";
-    barEl.classList.toggle("low", seconds <= 60);
+    paintTimer();
     if(seconds <= 0) finish(false);
   }
   function finish(won){

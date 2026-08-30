@@ -6,8 +6,15 @@ set -euo pipefail
 ROOT=/var/www/tiles
 SRC="$(cd "$(dirname "$0")" && pwd)/index.html"
 
-node --check <(sed -n '/^<script>/,/^<\/script>/p' "$SRC" | sed '1d;$d') \
-  && echo "js syntax ok"
+# Syntax-gate the deploy. Extract to a REAL temp file: `node --check <(...)`
+# cannot stat a process-substitution pipe, so it fails for the wrong reason
+# and reads as a passing guard that never actually ran.
+tmp=$(mktemp /tmp/tile-parlour.XXXXXX.js)
+trap 'rm -f "$tmp"' EXIT
+sed -n '/^<script>/,/^<\/script>/p' "$SRC" | sed '1d;$d' > "$tmp"
+[ -s "$tmp" ] || { echo "FAILED: extracted no JS from $SRC"; exit 1; }
+node --check "$tmp" || { echo "FAILED: index.html contains invalid JS"; exit 1; }
+echo "js syntax ok ($(wc -l < "$tmp") lines)"
 
 sudo mkdir -p "$ROOT"
 sudo cp "$SRC" "$ROOT/index.html"

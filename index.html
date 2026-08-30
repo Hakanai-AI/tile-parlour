@@ -1,0 +1,709 @@
+<title>Tile Parlour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Nunito:wght@600;800&display=swap">
+<style>
+  :root{
+    --felt:#1E4536;
+    --felt-dark:#14302A;
+    --tile:#F2E8D5;
+    --tile-top:#FBF5E8;
+    --tile-edge:#C6B392;
+    --tile-deep:#A8916E;
+    --jade:#52B98A;
+    --vermilion:#C4442E;
+    --ink:#241F18;
+    --plaque:#26543F;
+    --cell:44px;
+    --gap:3px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:radial-gradient(ellipse 120% 90% at 50% 40%, var(--felt) 0%, var(--felt-dark) 100%);
+    color:var(--tile);
+    font-family:"Nunito",system-ui,sans-serif;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; padding:14px 10px 20px;
+    -webkit-tap-highlight-color:transparent;
+  }
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none;
+    background-image:
+      repeating-linear-gradient(45deg, rgba(255,255,255,.020) 0 2px, transparent 2px 4px),
+      repeating-linear-gradient(-45deg, rgba(0,0,0,.020) 0 2px, transparent 2px 4px);
+  }
+  header{ text-align:center; }
+  h1{
+    font-family:"Noto Serif TC",serif; font-weight:700;
+    font-size:clamp(1.15rem,4.4vw,1.6rem); letter-spacing:.14em;
+    margin:0; color:var(--tile); text-wrap:balance;
+  }
+  .sub{ margin:3px 0 0; font-size:.72rem; letter-spacing:.13em; text-transform:uppercase; color:#9FC7B2; }
+
+  .hud{ display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; width:100%; max-width:760px; }
+  .plaque{
+    background:linear-gradient(180deg,var(--plaque),#1D4133);
+    border:1px solid #3A6E56; border-radius:9px;
+    padding:5px 11px; min-width:78px; text-align:center;
+    box-shadow:0 2px 0 rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.07);
+  }
+  .plaque .lbl{ display:block; font-family:"Noto Serif TC",serif; font-size:.66rem; letter-spacing:.1em; color:#A9CFBB; }
+  .plaque .val{ display:block; font-weight:800; font-size:1.18rem; font-variant-numeric:tabular-nums; color:var(--tile); line-height:1.15; }
+  .plaque.warn .val{ color:var(--vermilion); }
+
+  button{
+    font-family:"Nunito",sans-serif; font-weight:800; font-size:.82rem; letter-spacing:.03em;
+    color:var(--ink);
+    background:linear-gradient(180deg,var(--tile-top),var(--tile-edge));
+    border:1px solid var(--tile-deep); border-radius:9px;
+    padding:8px 14px; cursor:pointer; box-shadow:0 2px 0 var(--tile-deep);
+  }
+  button:hover{ filter:brightness(1.05); }
+  button:active{ transform:translateY(2px); box-shadow:0 0 0 var(--tile-deep); }
+  button:focus-visible{ outline:3px solid var(--jade); outline-offset:2px; }
+  button.off{ background:linear-gradient(180deg,#3C6B57,#2A5643); color:#B9D8C7; border-color:#2A5643; box-shadow:0 2px 0 #1D4133; }
+
+  .timerwrap{
+    width:100%; max-width:760px; height:7px;
+    background:rgba(0,0,0,.3); border-radius:99px; overflow:hidden;
+    border:1px solid rgba(255,255,255,.07);
+  }
+  #timerbar{ height:100%; width:100%; background:linear-gradient(90deg,var(--jade),#8ED9B4); transition:width 1s linear, background .4s; }
+  #timerbar.low{ background:linear-gradient(90deg,var(--vermilion),#E0765F); }
+
+  .table{
+    position:relative; padding:12px; border-radius:16px;
+    background:linear-gradient(180deg,#245040,#1B3E31);
+    border:1px solid #376C55;
+    box-shadow:0 10px 30px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  #board{ display:grid; gap:var(--gap); position:relative; perspective:900px; }
+  .tile{
+    width:var(--cell); height:var(--cell);
+    display:flex; align-items:center; justify-content:center;
+    font-size:calc(var(--cell) * .58); line-height:1;
+    border-radius:5px;
+    background:linear-gradient(180deg,var(--tile-top) 0%, var(--tile) 62%, var(--tile-edge) 100%);
+    border:1px solid var(--tile-deep);
+    box-shadow:0 2px 0 var(--tile-deep);
+    cursor:pointer; user-select:none;
+    transition:transform .09s, box-shadow .09s;
+    backface-visibility:hidden;
+  }
+  .tile:hover{ transform:translateY(-1px); }
+  .tile.sel{
+    outline:3px solid var(--jade); outline-offset:1px;
+    transform:translateY(-2px);
+    box-shadow:0 4px 0 var(--tile-deep), 0 0 16px rgba(82,185,138,.55);
+  }
+  .tile.hint{ animation:pulse .75s ease-in-out infinite; }
+  @keyframes pulse{
+    50%{ box-shadow:0 2px 0 var(--tile-deep), 0 0 18px rgba(82,185,138,.95); transform:translateY(-2px); }
+  }
+  .tile.bad{ animation:shake .3s ease; }
+  @keyframes shake{ 25%{transform:translateX(-3px);} 75%{transform:translateX(3px);} }
+  .tile.gone{ animation:pop .22s ease-out forwards; pointer-events:none; }
+  @keyframes pop{ to{ transform:scale(.35); opacity:0; } }
+  .slot{ width:var(--cell); height:var(--cell); }
+
+  #path{ position:absolute; inset:12px; pointer-events:none; overflow:visible; }
+  #path polyline{
+    fill:none; stroke:var(--jade); stroke-width:3.5;
+    stroke-linecap:round; stroke-linejoin:round;
+    filter:drop-shadow(0 0 5px rgba(82,185,138,.85));
+  }
+
+  .plaque.combo{ position:relative; overflow:hidden; }
+  .plaque.combo .cbar{
+    position:absolute; left:0; right:0; bottom:0; height:3px;
+    background:rgba(0,0,0,.28); display:block;
+  }
+  .plaque.combo .cbar i{
+    display:block; height:100%; width:0%;
+    background:linear-gradient(90deg,var(--jade),#B7E8CF);
+  }
+  .plaque.combo.hot .val{ color:#8FE3B8; }
+  .plaque.combo.blaze .val{ color:#FFD98A; }
+
+  .float{
+    position:absolute; pointer-events:none; z-index:5;
+    font-weight:800; font-size:.95rem; letter-spacing:.04em;
+    color:#B7E8CF; text-shadow:0 2px 6px rgba(0,0,0,.6);
+    animation:rise 1s ease-out forwards; white-space:nowrap;
+  }
+  .float.gold{ color:#FFD98A; font-size:1.05rem; }
+  @keyframes rise{
+    from{ transform:translate(-50%,0); opacity:0; }
+    18%{ opacity:1; }
+    to{ transform:translate(-50%,-42px); opacity:0; }
+  }
+  .tile.gift{ animation:gift .45s ease-out forwards; pointer-events:none; }
+  @keyframes gift{
+    35%{ transform:scale(1.16); box-shadow:0 2px 0 var(--tile-deep), 0 0 22px rgba(255,217,138,.95); }
+    to{ transform:scale(.35); opacity:0; }
+  }
+
+  #modal{
+    position:fixed; inset:0; background:rgba(10,24,19,.82);
+    display:none; align-items:center; justify-content:center; padding:20px; z-index:20;
+  }
+  #modal.on{ display:flex; }
+  .card{
+    background:linear-gradient(180deg,#26543F,#1B3E31);
+    border:1px solid #3E7A5F; border-radius:14px;
+    padding:26px 28px; text-align:center; max-width:340px;
+    box-shadow:0 16px 40px rgba(0,0,0,.5);
+  }
+  .card h2{ font-family:"Noto Serif TC",serif; margin:0 0 6px; font-size:1.5rem; letter-spacing:.08em; color:var(--tile); }
+  .card p{ margin:0 0 18px; color:#A9CFBB; font-size:.9rem; line-height:1.5; }
+  .foot{ font-size:.72rem; color:#7FA893; text-align:center; max-width:560px; line-height:1.6; }
+  @media (prefers-reduced-motion:reduce){
+    *{ animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+  }
+</style>
+
+<header>
+  <h1>連連看</h1>
+  <p class="sub">Match a pair · two turns or fewer</p>
+</header>
+
+<div class="hud">
+  <div class="plaque"><span class="lbl">剩餘的牌</span><span class="val" id="left">0</span></div>
+  <div class="plaque" id="matchPlaque"><span class="lbl">可消除</span><span class="val" id="avail">0</span></div>
+  <div class="plaque"><span class="lbl">分數</span><span class="val" id="score">0</span></div>
+  <div class="plaque combo" id="comboPlaque">
+    <span class="lbl">連擊</span><span class="val" id="combo">—</span>
+    <span class="cbar"><i id="cbarfill"></i></span>
+  </div>
+  <button id="hint">提示 Hint</button>
+  <button id="shuffle">洗牌 Shuffle</button>
+  <button id="sfx" aria-pressed="true">🔊 音效</button>
+  <button id="music" aria-pressed="true">♪ 音樂</button>
+  <button id="again">重新開始</button>
+</div>
+
+<div class="timerwrap"><div id="timerbar"></div></div>
+
+<div class="table">
+  <div id="board"></div>
+  <svg id="path"></svg>
+</div>
+
+<p class="foot">
+  Tap two identical tiles. They clear if a clear path joins them with at most two turns —
+  routes may travel around the outside of the board. Stuck for a few seconds and a pair
+  lights up on its own; run out of moves entirely and the tiles reshuffle.
+</p>
+
+<div id="modal">
+  <div class="card">
+    <h2 id="mtitle">Cleared</h2>
+    <p id="mbody">Every tile matched.</p>
+    <button id="mbtn">Play again</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const COLS = 10, ROWS = 8;
+  const W = COLS + 2, H = ROWS + 2;
+  const FACES = ["🥦","🧀","🍞","☕","🥔","🍯","🌶️","🍈","🥐","🍚",
+                 "🍅","🥕","🍇","🍄","🌽","🍒","🥬","🍩","🥚","🍋"];
+  const START_SECONDS = 300;
+  const IDLE_HINT_MS = 9000;          // auto-hint after this long with no match
+  const COMBO_MS     = 3500;          // chain window: match again inside it to build combo
+  const BONUS_CAP    = 5;             // max seconds a single chained match can return
+  const GIFT_EVERY   = 5;             // every Nth combo level clears a pair for free
+
+  const boardEl  = document.getElementById("board");
+  const pathEl   = document.getElementById("path");
+  const leftEl   = document.getElementById("left");
+  const availEl  = document.getElementById("avail");
+  const barEl    = document.getElementById("timerbar");
+  const plaqueEl = document.getElementById("matchPlaque");
+  const modal    = document.getElementById("modal");
+
+  let grid, els, sel = null;
+  let remaining, seconds, ticker, busy = false;
+  let idleTimer = null, hinted = [];
+  let combo = 0, comboUntil = 0, comboTicker = null, score = 0;
+
+  const DIRS = [[0,-1],[1,0],[0,1],[-1,0]];
+
+  /* ── audio: everything synthesised, no asset files ─────────────── */
+  const Audio2 = (function(){
+    let ctx = null, master = null, musicGain = null, musicTimer = null;
+    let sfxOn = load("tp_sfx", true), musicOn = load("tp_music", true);
+
+    function load(k, d){ try{ const v = localStorage.getItem(k); return v === null ? d : v === "1"; }catch(_){ return d; } }
+    function save(k, v){ try{ localStorage.setItem(k, v ? "1" : "0"); }catch(_){} }
+
+    function ensure(){
+      if(ctx) { if(ctx.state === "suspended") ctx.resume(); return ctx; }
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return null;
+      ctx = new AC();
+      master = ctx.createGain(); master.gain.value = 0.22; master.connect(ctx.destination);
+      musicGain = ctx.createGain(); musicGain.gain.value = 0.5; musicGain.connect(master);
+      return ctx;
+    }
+
+    // one plucked note
+    function note(freq, when, dur, type, gain, dest){
+      if(!ctx) return;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass"; lp.frequency.value = 2600;
+      o.type = type || "triangle";
+      o.frequency.setValueAtTime(freq, when);
+      g.gain.setValueAtTime(0.0001, when);
+      g.gain.exponentialRampToValueAtTime(gain || 0.3, when + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+      o.connect(g); g.connect(lp); lp.connect(dest || master);
+      o.start(when); o.stop(when + dur + 0.05);
+    }
+
+    function sfx(name){
+      if(!sfxOn || !ensure()) return;
+      const t = ctx.currentTime;
+      if(name === "select")      note(660, t, 0.09, "square", 0.16);
+      else if(name === "match" || (name && name.indexOf("match:") === 0)){
+        // pitch climbs with the combo level so a chain audibly builds
+        const lvl = name.indexOf(":") > 0 ? parseInt(name.split(":")[1],10) || 1 : 1;
+        const step = Math.pow(2, Math.min(lvl - 1, 10) / 12);   // semitone per level
+        note(784*step, t, 0.22, "triangle", 0.3);
+        note(1175*step, t + 0.07, 0.28, "triangle", 0.22);
+      }
+      else if(name === "gift"){
+        [880,1109,1319,1760].forEach((f,i) => note(f, t + i*0.06, 0.34, "triangle", 0.26));
+      }
+      else if(name === "bonus") note(1568, t, 0.18, "sine", 0.2);
+      else if(name === "bad")     note(150, t, 0.16, "sawtooth", 0.16);
+      else if(name === "hint")    note(1320, t, 0.3, "sine", 0.16);
+      else if(name === "shuffle"){
+        for(let i=0;i<7;i++) note(300 + i*120, t + i*0.035, 0.1, "triangle", 0.12);
+      }
+      else if(name === "win"){
+        [523,659,784,1047].forEach((f,i) => note(f, t + i*0.11, 0.42, "triangle", 0.3));
+      }
+      else if(name === "lose"){
+        [440,392,330,262].forEach((f,i) => note(f, t + i*0.13, 0.4, "triangle", 0.26));
+      }
+    }
+
+    // sparse pentatonic music-box line — deliberately unobtrusive
+    const SCALE = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25];
+    function startMusic(){
+      if(!musicOn || !ensure() || musicTimer) return;
+      let i = 0;
+      musicTimer = setInterval(() => {
+        if(!musicOn || !ctx) return;
+        const t = ctx.currentTime;
+        const f = SCALE[Math.floor(Math.random()*SCALE.length)];
+        note(f, t, 1.6, "sine", 0.13, musicGain);
+        if(i % 4 === 0) note(SCALE[0]/2, t, 2.4, "sine", 0.10, musicGain);
+        i++;
+      }, 1700);
+    }
+    function stopMusic(){ if(musicTimer){ clearInterval(musicTimer); musicTimer = null; } }
+
+    return {
+      sfx,
+      kick(){ ensure(); startMusic(); },          // call on first gesture
+      toggleSfx(){ sfxOn = !sfxOn; save("tp_sfx", sfxOn); if(sfxOn){ ensure(); sfx("select"); } return sfxOn; },
+      toggleMusic(){ musicOn = !musicOn; save("tp_music", musicOn); musicOn ? startMusic() : stopMusic(); return musicOn; },
+      get sfxOn(){ return sfxOn; },
+      get musicOn(){ return musicOn; }
+    };
+  })();
+
+  let kicked = false;
+  function firstGesture(){ if(kicked) return; kicked = true; Audio2.kick(); }
+  document.addEventListener("pointerdown", firstGesture, {once:false});
+  document.addEventListener("keydown", firstGesture, {once:false});
+
+  /* ── build ─────────────────────────────────────────────────────── */
+  function newGame(){
+    clearInterval(ticker);
+    const total = COLS * ROWS;
+    const pool = [];
+    for(let i=0; i<total/2; i++) pool.push(FACES[i % FACES.length], FACES[i % FACES.length]);
+    shuffleArr(pool);
+
+    grid = Array.from({length:H}, () => Array(W).fill(null));
+    let k = 0;
+    for(let y=1; y<=ROWS; y++) for(let x=1; x<=COLS; x++) grid[y][x] = pool[k++];
+
+    remaining = total; seconds = START_SECONDS;
+    sel = null; busy = false;
+    combo = 0; comboUntil = 0; score = 0;
+    paintCombo();
+    render();
+    ensureSolvable();
+    updateHud();
+    barEl.classList.remove("low"); barEl.style.width = "100%";
+    ticker = setInterval(tick, 1000);
+    clearInterval(comboTicker); comboTicker = setInterval(comboTick, 90);
+    modal.classList.remove("on");
+    armIdle();
+  }
+
+  function shuffleArr(a){
+    for(let i=a.length-1; i>0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; }
+  }
+
+  function render(){
+    boardEl.style.gridTemplateColumns = `repeat(${COLS}, var(--cell))`;
+    boardEl.innerHTML = "";
+    els = Array.from({length:H}, () => Array(W).fill(null));
+    for(let y=1; y<=ROWS; y++){
+      for(let x=1; x<=COLS; x++){
+        const face = grid[y][x];
+        if(face === null){ boardEl.appendChild(slot()); continue; }
+        const t = document.createElement("div");
+        t.className = "tile";
+        t.textContent = face;
+        t.setAttribute("role","button");
+        t.setAttribute("tabindex","0");
+        t.setAttribute("aria-label","tile " + face);
+        t.addEventListener("click", () => pick(x,y,t));
+        t.addEventListener("keydown", e => {
+          if(e.key === "Enter" || e.key === " "){ e.preventDefault(); pick(x,y,t); }
+        });
+        boardEl.appendChild(t);
+        els[y][x] = t;
+      }
+    }
+    sizeCells();
+  }
+
+  function slot(){ const s = document.createElement("div"); s.className = "slot"; return s; }
+
+  function sizeCells(){
+    const avail = Math.min(window.innerWidth - 44, 760);
+    const cell = Math.max(26, Math.min(52, Math.floor((avail - 3*(COLS-1)) / COLS)));
+    document.documentElement.style.setProperty("--cell", cell + "px");
+  }
+  window.addEventListener("resize", sizeCells);
+
+  /* ── connectivity: BFS over (cell, direction, turns<=2) ────────── */
+  function passable(x, y, target){
+    if(x < 0 || y < 0 || x >= W || y >= H) return false;
+    if(target && x === target.x && y === target.y) return true;
+    return grid[y][x] === null;
+  }
+  function findPath(a, b){
+    const best = new Map(), queue = [];
+    for(let d=0; d<4; d++){
+      const nx = a.x + DIRS[d][0], ny = a.y + DIRS[d][1];
+      if(!passable(nx, ny, b)) continue;
+      queue.push({x:nx, y:ny, d, turns:0, path:[{x:a.x,y:a.y},{x:nx,y:ny}]});
+    }
+    while(queue.length){
+      const cur = queue.shift();
+      if(cur.x === b.x && cur.y === b.y) return cur.path;
+      const key = cur.x + "," + cur.y + "," + cur.d;
+      if(best.has(key) && best.get(key) <= cur.turns) continue;
+      best.set(key, cur.turns);
+      for(let d=0; d<4; d++){
+        const turns = cur.turns + (d === cur.d ? 0 : 1);
+        if(turns > 2) continue;
+        const nx = cur.x + DIRS[d][0], ny = cur.y + DIRS[d][1];
+        if(!passable(nx, ny, b)) continue;
+        const path = (d === cur.d)
+          ? cur.path.slice(0,-1).concat([{x:nx,y:ny}])
+          : cur.path.concat([{x:nx,y:ny}]);
+        queue.push({x:nx, y:ny, d, turns, path});
+      }
+    }
+    return null;
+  }
+
+  function allPairs(){
+    const spots = [];
+    for(let y=1; y<=ROWS; y++) for(let x=1; x<=COLS; x++)
+      if(grid[y][x] !== null) spots.push({x,y,f:grid[y][x]});
+    const out = [];
+    for(let i=0; i<spots.length; i++)
+      for(let j=i+1; j<spots.length; j++){
+        if(spots[i].f !== spots[j].f) continue;
+        if(findPath(spots[i], spots[j])) out.push([spots[i], spots[j]]);
+      }
+    return out;
+  }
+
+  function ensureSolvable(){
+    let guard = 0;
+    while(remaining > 0 && allPairs().length === 0 && guard++ < 60) reassignFaces();
+  }
+
+  /* ── shuffle: reassign faces in place, flip the tiles ──────────── */
+  function reassignFaces(){
+    const faces = [], spots = [];
+    for(let y=1; y<=ROWS; y++) for(let x=1; x<=COLS; x++)
+      if(grid[y][x] !== null){ faces.push(grid[y][x]); spots.push({x,y}); }
+    shuffleArr(faces);
+    spots.forEach((s,i) => { grid[s.y][s.x] = faces[i]; });
+  }
+
+  function doShuffle(){
+    if(busy) return;
+    clearHints();
+    busy = true;
+    Audio2.sfx("shuffle");
+
+    reassignFaces();
+    let guard = 0;
+    while(allPairs().length === 0 && guard++ < 60) reassignFaces();
+
+    // staggered card-flip: half-turn out, swap the face, half-turn back
+    const cx = (COLS + 1) / 2, cy = (ROWS + 1) / 2;
+    let last = 0;
+    for(let y=1; y<=ROWS; y++){
+      for(let x=1; x<=COLS; x++){
+        const el = els[y][x];
+        if(!el) continue;
+        const dist = Math.hypot(x - cx, y - cy);
+        const delay = dist * 26;
+        last = Math.max(last, delay);
+        const face = grid[y][x];
+        setTimeout(() => {
+          el.style.transition = "transform .16s ease-in";
+          el.style.transform = "rotateY(90deg) scale(.92)";
+          setTimeout(() => {
+            el.textContent = face;
+            el.style.transition = "transform .18s ease-out";
+            el.style.transform = "";
+          }, 165);
+        }, delay);
+      }
+    }
+    setTimeout(() => {
+      busy = false;
+      updateHud();
+      armIdle();
+    }, last + 420);
+  }
+
+  /* ── interaction ───────────────────────────────────────────────── */
+  function pick(x, y, el){
+    if(busy || grid[y][x] === null) return;
+    clearHints();
+    if(sel && sel.x === x && sel.y === y){
+      el.classList.remove("sel"); sel = null; return;
+    }
+    if(!sel){
+      el.classList.add("sel"); sel = {x,y,el};
+      Audio2.sfx("select");
+      return;
+    }
+    const sameFace = grid[sel.y][sel.x] === grid[y][x];
+    const path = sameFace ? findPath({x:sel.x,y:sel.y}, {x,y}) : null;
+    if(!path){
+      if(sameFace){                       // right face, no legal route
+        el.classList.remove("bad"); void el.offsetWidth; el.classList.add("bad");
+        setTimeout(() => el.classList.remove("bad"), 320);
+        Audio2.sfx("bad");
+      } else {
+        Audio2.sfx("select");
+      }
+      sel.el.classList.remove("sel");
+      el.classList.add("sel");
+      sel = {x,y,el};
+      return;
+    }
+    clearPair(sel, {x,y,el}, path);
+  }
+
+  function clearPair(a, b, path){
+    busy = true;
+
+    // chain if this match landed inside the window left by the previous one
+    const now = Date.now();
+    combo = (now < comboUntil) ? combo + 1 : 1;
+    comboUntil = now + COMBO_MS;
+
+    score += 100 * combo;
+    Audio2.sfx("match:" + combo);
+
+    if(combo >= 2){
+      const bonus = Math.min(combo - 1, BONUS_CAP);      // +1s per level, capped
+      seconds = Math.min(seconds + bonus, START_SECONDS);
+      barEl.style.width = Math.max(0,(seconds/START_SECONDS)*100) + "%";
+      barEl.classList.toggle("low", seconds <= 60);
+      floatText("\u00d7" + combo + "  +" + bonus + "s", b.x, b.y, combo >= GIFT_EVERY);
+      Audio2.sfx("bonus");
+    }
+    paintCombo();
+
+    const gift = (combo > 0 && combo % GIFT_EVERY === 0);
+    drawPath(path);
+    a.el.classList.remove("sel");
+    a.el.classList.add("gone");
+    b.el.classList.add("gone");
+    grid[a.y][a.x] = null; grid[b.y][b.x] = null;
+    remaining -= 2;
+    sel = null;
+
+    setTimeout(() => {
+      pathEl.innerHTML = "";
+      a.el.replaceWith(slot()); b.el.replaceWith(slot());
+      els[a.y][a.x] = null; els[b.y][b.x] = null;
+      busy = false;
+      if(remaining === 0){ finish(true); return; }
+      if(allPairs().length === 0){ doShuffle(); return; }
+      updateHud();
+      armIdle();
+      if(gift){
+        floatText("\u514d\u8cbb\u6d88\u9664!", b.x, b.y, true);   // "free clear!"
+        setTimeout(giftClear, 220);
+      }
+    }, 240);
+  }
+
+  function drawPath(path){
+    const cell = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--cell"));
+    const step = cell + 3;
+    const px = c => (c - 1) * step + cell/2;
+    pathEl.innerHTML = `<polyline points="${path.map(p => `${px(p.x)},${px(p.y)}`).join(" ")}"></polyline>`;
+  }
+
+  /* ── hints: manual + automatic when the player stalls ──────────── */
+  function clearHints(){
+    hinted.forEach(el => el && el.classList.remove("hint"));
+    hinted = [];
+  }
+  function armIdle(){
+    clearTimeout(idleTimer);
+    if(remaining <= 0) return;
+    idleTimer = setTimeout(() => showHint(true), IDLE_HINT_MS);
+  }
+  function showHint(auto){
+    if(busy || remaining <= 0) return;
+    const pairs = allPairs();
+    if(!pairs.length) return;
+    clearHints();
+    const [p,q] = pairs[Math.floor(Math.random()*pairs.length)];
+    [p,q].forEach(s => {
+      const el = els[s.y][s.x];
+      if(!el) return;
+      el.classList.add("hint");
+      hinted.push(el);
+    });
+    Audio2.sfx("hint");
+    // an auto-hint keeps pulsing until the player acts; a manual one is a nudge
+    if(!auto) setTimeout(clearHints, 2400);
+    else armIdle();
+  }
+
+  /* ── combo: chain matches inside a window for time + free clears ── */
+  function paintCombo(){
+    const el = document.getElementById("combo");
+    const pl = document.getElementById("comboPlaque");
+    document.getElementById("score").textContent = score;
+    el.textContent = combo >= 2 ? "\u00d7" + combo : "\u2014";
+    pl.classList.toggle("hot", combo >= 3 && combo < GIFT_EVERY);
+    pl.classList.toggle("blaze", combo >= GIFT_EVERY);
+  }
+
+  function comboTick(){
+    const fill = document.getElementById("cbarfill");
+    const leftMs = comboUntil - Date.now();
+    if(combo < 2 || leftMs <= 0){
+      fill.style.width = "0%";
+      if(combo >= 2 && leftMs <= 0){ combo = 0; paintCombo(); }
+      return;
+    }
+    fill.style.width = Math.max(0, Math.min(100, (leftMs / COMBO_MS) * 100)) + "%";
+  }
+
+  // floating "+2s" / "COMBO x4" text anchored over a board cell
+  function floatText(txt, x, y, gold){
+    const cell = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--cell"));
+    const step = cell + 3;
+    const el = document.createElement("div");
+    el.className = "float" + (gold ? " gold" : "");
+    el.textContent = txt;
+    el.style.left = (12 + (x - 1) * step + cell/2) + "px";
+    el.style.top  = (12 + (y - 1) * step) + "px";
+    document.querySelector(".table").appendChild(el);
+    setTimeout(() => el.remove(), 1050);
+  }
+
+  // clear one pair for free — the reward for a long chain
+  function giftClear(){
+    const pairs = allPairs();
+    if(!pairs.length) return false;
+    const [p,q] = pairs[Math.floor(Math.random()*pairs.length)];
+    const path = findPath(p,q);
+    const ea = els[p.y][p.x], eb = els[q.y][q.x];
+    if(!ea || !eb) return false;
+    Audio2.sfx("gift");
+    if(path) drawPath(path);
+    ea.classList.add("gift"); eb.classList.add("gift");
+    grid[p.y][p.x] = null; grid[q.y][q.x] = null;
+    remaining -= 2;
+    score += 100;
+    setTimeout(() => {
+      pathEl.innerHTML = "";
+      ea.replaceWith(slot()); eb.replaceWith(slot());
+      els[p.y][p.x] = null; els[q.y][q.x] = null;
+      if(remaining === 0){ finish(true); return; }
+      if(allPairs().length === 0){ doShuffle(); return; }
+      updateHud();
+    }, 460);
+    return true;
+  }
+
+  /* ── hud / timer ───────────────────────────────────────────────── */
+  function updateHud(){
+    leftEl.textContent = remaining;
+    const n = allPairs().length;
+    availEl.textContent = n;
+    plaqueEl.classList.toggle("warn", n === 0);
+  }
+  function tick(){
+    seconds--;
+    barEl.style.width = Math.max(0, (seconds/START_SECONDS)*100) + "%";
+    barEl.classList.toggle("low", seconds <= 60);
+    if(seconds <= 0) finish(false);
+  }
+  function finish(won){
+    clearInterval(ticker);
+    clearInterval(comboTicker);
+    combo = 0; paintCombo();
+    clearTimeout(idleTimer);
+    clearHints();
+    busy = true;
+    Audio2.sfx(won ? "win" : "lose");
+    document.getElementById("mtitle").textContent = won ? "全部消除" : "時間到";
+    document.getElementById("mbody").textContent = won
+      ? `Board cleared with ${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,"0")} to spare. Score ${score}.`
+      : `${remaining} tiles left on the table. Score ${score}.`;
+    modal.classList.add("on");
+  }
+
+  /* ── controls ──────────────────────────────────────────────────── */
+  document.getElementById("hint").addEventListener("click", () => { showHint(false); armIdle(); });
+  document.getElementById("shuffle").addEventListener("click", doShuffle);
+  document.getElementById("again").addEventListener("click", newGame);
+  document.getElementById("mbtn").addEventListener("click", newGame);
+
+  const sfxBtn = document.getElementById("sfx"), musicBtn = document.getElementById("music");
+  function paint(btn, on, onText, offText){
+    btn.textContent = on ? onText : offText;
+    btn.classList.toggle("off", !on);
+    btn.setAttribute("aria-pressed", String(on));
+  }
+  paint(sfxBtn, Audio2.sfxOn, "🔊 音效", "🔇 音效");
+  paint(musicBtn, Audio2.musicOn, "♪ 音樂", "♪̶ 音樂");
+  sfxBtn.addEventListener("click", () => paint(sfxBtn, Audio2.toggleSfx(), "🔊 音效", "🔇 音效"));
+  musicBtn.addEventListener("click", () => paint(musicBtn, Audio2.toggleMusic(), "♪ 音樂", "♪̶ 音樂"));
+
+  newGame();
+})();
+</script>

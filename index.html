@@ -1,4 +1,5 @@
 <title>Tile Parlour</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Nunito:wght@600;800&display=swap">
@@ -20,13 +21,26 @@
   *{box-sizing:border-box;}
   body{
     margin:0;
+    /* dvh tracks the visible area as mobile browser chrome hides and shows;
+       vh does not, and leaves the board clipped behind the URL bar. */
     min-height:100vh;
+    min-height:100dvh;
     background:radial-gradient(ellipse 120% 90% at 50% 40%, var(--felt) 0%, var(--felt-dark) 100%);
     color:var(--tile);
     font-family:"Nunito",system-ui,sans-serif;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:14px; padding:14px 10px 20px;
+    gap:14px;
+    /* Honour the notch/home-indicator insets, required once the viewport is
+       declared viewport-fit=cover. */
+    padding:calc(14px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right))
+            calc(20px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left));
     -webkit-tap-highlight-color:transparent;
+    /* Matching is a two-taps-in-quick-succession game, which is exactly the
+       gesture a browser reads as double-tap-to-zoom. manipulation keeps
+       scrolling and pinch but drops double-tap zoom and the 300ms click delay. */
+    touch-action:manipulation;
+    /* Fast repeated taps otherwise start selecting the HUD labels. */
+    -webkit-user-select:none; user-select:none;
   }
   body::before{
     content:""; position:fixed; inset:0; pointer-events:none;
@@ -162,6 +176,17 @@
   .foot{ font-size:.72rem; color:#7FA893; text-align:center; max-width:560px; line-height:1.6; }
   @media (prefers-reduced-motion:reduce){
     *{ animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+  }
+
+  /* A phone held sideways has roughly 390px of height, and the header,
+     scoreboard, buttons and instructions were claiming about 275px of it —
+     leaving too little for eight rows, so the board ran off the bottom.
+     Reclaim the prose: the rules matter on a first visit, not on every
+     landscape frame, and the board is the thing you came for. */
+  @media (max-height:520px){
+    body{ gap:8px; padding-top:calc(6px + env(safe-area-inset-top)); padding-bottom:calc(6px + env(safe-area-inset-bottom)); }
+    header{ display:none; }
+    .foot{ display:none; }
   }
 </style>
 
@@ -424,11 +449,28 @@ window.TILE_ART = TILE_ART;
   function slot(){ const s = document.createElement("div"); s.className = "slot"; return s; }
 
   function sizeCells(){
-    const avail = Math.min(window.innerWidth - 44, 760);
-    const cell = Math.max(26, Math.min(52, Math.floor((avail - 3*(COLS-1)) / COLS)));
+    const gap = 3;
+    const byWidth = (Math.min(window.innerWidth - 28, 760) - gap*(COLS-1)) / COLS;
+
+    // Height matters as much as width on a phone: portrait has room to spare,
+    // landscape does not, and sizing on width alone pushed the board off the
+    // bottom of the screen. Measure the surrounding chrome rather than guess
+    // at it, so the board keeps fitting if the HUD wraps to another line.
+    let chrome = 0;
+    for(const el of document.body.children){
+      if(el.id === "modal") continue;                 // overlay, not in flow
+      if(el.contains(boardEl)) continue;              // the board's own wrapper
+      chrome += el.getBoundingClientRect().height;
+    }
+    chrome += 90; // body padding + flex gaps between the rows above
+    const byHeight = (window.innerHeight - chrome - gap*(ROWS-1)) / ROWS;
+
+    const cell = Math.max(18, Math.min(52, Math.floor(Math.min(byWidth, byHeight))));
     document.documentElement.style.setProperty("--cell", cell + "px");
   }
   window.addEventListener("resize", sizeCells);
+  // Orientation changes report the old dimensions if measured immediately.
+  window.addEventListener("orientationchange", () => setTimeout(sizeCells, 100));
 
   /* ── connectivity: BFS over (cell, direction, turns<=2) ────────── */
   function passable(x, y, target){
